@@ -1,0 +1,13 @@
+代码阅读解释/
+node_modules/
+dist/src/
+build*/
+
+output/
+!src/output/
+
+test*/
+test*
+
+*.md
+!README.md
