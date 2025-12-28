@@ -112,14 +112,17 @@ export class Parser {
    */
   private parseDataSegment(): void {
     this.context.currentSegment = 'data';
+    // 切换到data段时，使用data段的起始地址作为programCounter
+    const dataSegment = this.context.segments.get('data')!;
+    this.context.programCounter = dataSegment.startAddress;
     this.advance(); // 跳过 .data
     
     // 解析可选的起始地址
     if (this.match(TokenType.HEX_NUMBER)) {
       const addressToken = this.advance();
       const address = this.parseHexNumber(addressToken.value);
-      const dataSegment = this.context.segments.get('data')!;
       dataSegment.startAddress = address;
+      this.context.programCounter = address; // 更新programCounter
     }
     
     this.consume(TokenType.NEWLINE, 'Expected newline after .data directive');
@@ -148,6 +151,10 @@ export class Parser {
    */
   private parseTextSegment(): void {
     this.context.currentSegment = 'text';
+    // 切换到text段时，重置programCounter为text段的起始地址（通常是0）
+    // 这样.data段的数据定义不会影响.text段的标签地址
+    const textSegment = this.context.segments.get('text')!;
+    this.context.programCounter = textSegment.startAddress;
     this.advance(); // 跳过 .text
     this.consume(TokenType.NEWLINE, 'Expected newline after .text directive');
     
