@@ -7,5 +7,11 @@
     addi $t2, $zero, 0x0020 # Cause 2-6 of syscall is 01000
     beq $t1, $t2, _int_handler_syscall
     nop
+    # 如果不是syscall异常，恢复寄存器并返回
+    pop $t2
+    pop $t1
+    pop $t0
+    eret
+    nop
 # ===== minisys-interrupt-handler-entry.asm =====
 
