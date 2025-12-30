@@ -3,10 +3,16 @@
  * 将伪指令展开为真实指令
  */
 
-import { Instruction, Operand, OperandType } from '../core/types';
+import { Instruction, Operand, OperandType, AssemblyContext } from '../core/types';
 import { PSEUDO_INSTRUCTION_LOOKUP, INSTRUCTION_LOOKUP } from '../core/instruction-set';
 
 export class PseudoExpander {
+  private context?: AssemblyContext;
+
+  constructor(context?: AssemblyContext) {
+    this.context = context;
+  }
+
   /**
    * 展开伪指令
    */
@@ -18,7 +24,7 @@ export class PseudoExpander {
 
     const expandedInstructions: Instruction[] = [];
     
-    // 特殊处理li指令
+    // 特殊处理li指令（需要优化：16位内用addi，否则用lui+ori）
     if (instruction.mnemonic === 'li' && instruction.operands.length >= 2) {
       const targetReg = instruction.operands[0];
       const immediate = instruction.operands[1];
@@ -36,31 +42,14 @@ export class PseudoExpander {
             lineNumber: instruction.lineNumber,
             sourceLine: `addi ${targetReg.value}, $zero, ${value}`
           });
-        } else {
-          // 32位立即数需要分解
-          const high = (value >>> 16) & 0xFFFF;
-          const low = value & 0xFFFF;
-          
-          expandedInstructions.push({
-            mnemonic: 'lui',
-            operands: [targetReg, { type: OperandType.IMMEDIATE, value: high.toString(), immediate: high }],
-            type: 'I_TYPE' as any,
-            opcode: 0x0F,
-            lineNumber: instruction.lineNumber,
-            sourceLine: `lui ${targetReg.value}, ${high}`
-          });
-          
-          expandedInstructions.push({
-            mnemonic: 'ori',
-            operands: [targetReg, targetReg, { type: OperandType.IMMEDIATE, value: low.toString(), immediate: low }],
-            type: 'I_TYPE' as any,
-            opcode: 0x0D,
-            lineNumber: instruction.lineNumber,
-            sourceLine: `ori ${targetReg.value}, ${targetReg.value}, ${low}`
-          });
+          return expandedInstructions;
         }
+        // 否则继续使用统一的占位符替换机制处理
       }
-    } else if (instruction.mnemonic === 'push' && instruction.operands.length >= 1) {
+    }
+    
+    // 特殊处理push/pop指令（需要特殊的内存地址格式）
+    if (instruction.mnemonic === 'push' && instruction.operands.length >= 1) {
       // 处理push指令
       const reg = instruction.operands[0];
       expandedInstructions.push({
@@ -192,7 +181,10 @@ export class PseudoExpander {
    */
   private parseExpansion(expansion: string, originalInstruction: Instruction): Instruction | null {
     // 移除注释
-    const cleanExpansion = expansion.split('#')[0].trim();
+    let cleanExpansion = expansion.split('#')[0].trim();
+    
+    // 统一替换所有占位符
+    cleanExpansion = this.replacePlaceholders(cleanExpansion, originalInstruction);
     
     // 解析指令和操作数
     const parts = cleanExpansion.split(/\s+/);
@@ -222,6 +214,92 @@ export class PseudoExpander {
       lineNumber: originalInstruction.lineNumber,
       sourceLine: cleanExpansion
     };
+  }
+
+  /**
+   * 统一替换占位符
+   * 处理所有类型的占位符：$1/$2/$3, %hi/%lo, immediate_high/immediate_low, label等
+   */
+  private replacePlaceholders(expansion: string, originalInstruction: Instruction): string {
+    let result = expansion;
+
+    // 1. 替换 %hi(address) 和 %lo(address) - 用于la指令
+    // 这些占位符需要从context中获取标签地址并分解
+    if (result.includes('%hi') || result.includes('%lo')) {
+      // 查找标签操作数（通常是la指令的第二个操作数）
+      const labelOperand = originalInstruction.operands.find(op => 
+        op.type === OperandType.LABEL && op.label
+      );
+      
+      if (labelOperand && labelOperand.label && this.context) {
+        const labelInfo = this.context.globalLabels.get(labelOperand.label);
+        if (labelInfo) {
+          const address = labelInfo.address;
+          const high = (address >>> 16) & 0xFFFF;
+          const low = address & 0xFFFF;
+          
+          // 先替换模板中的 "address" 为实际标签名
+          result = result.replace(/address/g, labelOperand.label);
+          
+          // 然后替换 %hi(label) 为地址的高16位
+          result = result.replace(/%hi\((\w+)\)/g, (match, label) => {
+            const info = this.context!.globalLabels.get(label);
+            if (info) {
+              return ((info.address >>> 16) & 0xFFFF).toString();
+            }
+            return match;
+          });
+          
+          // 替换 %lo(label) 为地址的低16位
+          result = result.replace(/%lo\((\w+)\)/g, (match, label) => {
+            const info = this.context!.globalLabels.get(label);
+            if (info) {
+              return (info.address & 0xFFFF).toString();
+            }
+            return match;
+          });
+        }
+      }
+    }
+
+    // 2. 替换 immediate_high 和 immediate_low - 用于li指令
+    if (result.includes('immediate_high') || result.includes('immediate_low')) {
+      const immediateOperand = originalInstruction.operands.find(op => 
+        op.type === OperandType.IMMEDIATE && op.immediate !== undefined
+      );
+      if (immediateOperand && immediateOperand.immediate !== undefined) {
+        const value = immediateOperand.immediate;
+        const high = (value >>> 16) & 0xFFFF;
+        const low = value & 0xFFFF;
+        result = result.replace(/immediate_high/g, high.toString());
+        result = result.replace(/immediate_low/g, low.toString());
+      }
+    }
+
+    // 3. 替换 label 占位符 - 用于分支和跳转指令（b, bal, beqz, bnez, bgt, bge, blt, ble等）
+    if (result.includes('label')) {
+      const labelOperand = originalInstruction.operands.find(op => 
+        op.type === OperandType.LABEL && op.label
+      );
+      if (labelOperand && labelOperand.label) {
+        result = result.replace(/label/g, labelOperand.label);
+      }
+    }
+
+    // 4. 替换 address 占位符 - 用于la指令（如果没有%hi/%lo，直接使用地址值）
+    if (result.includes('address') && !result.includes('%hi') && !result.includes('%lo')) {
+      const addressOperand = originalInstruction.operands.find(op => 
+        op.type === OperandType.LABEL && op.label
+      );
+      if (addressOperand && addressOperand.label && this.context) {
+        const labelInfo = this.context.globalLabels.get(addressOperand.label);
+        if (labelInfo) {
+          result = result.replace(/address/g, labelInfo.address.toString());
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

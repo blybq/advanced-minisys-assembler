@@ -37,7 +37,7 @@ export class Encoder {
 
   constructor(context: AssemblyContext) {
     this.context = context;
-    this.pseudoExpander = new PseudoExpander();
+    this.pseudoExpander = new PseudoExpander(context);
   }
 
   /**
