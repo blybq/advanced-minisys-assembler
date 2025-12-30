@@ -22,7 +22,8 @@ program
 program
   .argument('<input>', 'Input assembly file')
   .option('-o, --output <dir>', 'Output directory', './output')
-  .option('-f, --format <format>', 'Output format (coe, hex, bin, json)', 'coe')
+  .option('-f, --format <format>', 'Output format (coe, hex, bin, elf, json)', 'coe')
+  .option('--uart', 'Generate files for UART programming (bin and elf)', false)
   .option('-l, --link', 'Link with BIOS and interrupt handlers', false)
   .option('-r, --report', 'Generate assembly report', true)
   .option('-d, --disassembly', 'Generate disassembly', false)
@@ -104,8 +105,12 @@ program
       }
       
       // 验证输出格式
-      const format = options.format.toLowerCase();
-      if (!Object.values(OutputFormat).includes(format as OutputFormat)) {
+      let format = options.format.toLowerCase();
+      
+      // 如果指定了--uart选项，生成bin和elf文件
+      if (options.uart) {
+        format = 'uart'; // 特殊标记
+      } else if (!Object.values(OutputFormat).includes(format as OutputFormat)) {
         console.error(chalk.red(`Error: Invalid output format '${format}'`));
         console.error(chalk.yellow(`Supported formats: ${Object.values(OutputFormat).join(', ')}`));
         process.exit(1);
@@ -113,11 +118,12 @@ program
 
       // 创建汇编器配置
       const config: AssemblerConfig = {
-        outputFormat: format as OutputFormat,
+        outputFormat: (format === 'uart' ? OutputFormat.COE : format) as OutputFormat,
         generateReport: options.report,
         generateDisassembly: options.disassembly,
         optimizeCode: false,
-        verbose: options.verbose
+        verbose: options.verbose,
+        generateUartFiles: options.uart || false
       };
 
       // 创建汇编器
@@ -150,10 +156,22 @@ program
           console.log(`  Memory usage: ${result.statistics.memoryUsage} bytes`);
           console.log('');
           console.log(chalk.cyan('Generated files:'));
-          console.log(`  ${path.join(options.output, 'prgmip32.coe')} - Instruction memory`);
-          console.log(`  ${path.join(options.output, 'dmem32.coe')} - Data memory`);
-          console.log(`  ${path.join(options.output, 'program.hex')} - Hexadecimal format`);
-          console.log(`  ${path.join(options.output, 'program.json')} - JSON format`);
+          if (config.outputFormat === OutputFormat.COE || config.generateUartFiles) {
+            console.log(`  ${path.join(options.output, 'prgmip32.coe')} - Instruction memory`);
+            console.log(`  ${path.join(options.output, 'dmem32.coe')} - Data memory`);
+          }
+          if (config.outputFormat === OutputFormat.HEX) {
+            console.log(`  ${path.join(options.output, 'program.hex')} - Hexadecimal format`);
+          }
+          if (config.outputFormat === OutputFormat.BIN || config.generateUartFiles) {
+            console.log(`  ${path.join(options.output, 'program.bin')} - Binary format (UART)`);
+          }
+          if (config.outputFormat === OutputFormat.ELF || config.generateUartFiles) {
+            console.log(`  ${path.join(options.output, 'program.elf')} - ELF format (UART)`);
+          }
+          if (config.outputFormat === OutputFormat.JSON) {
+            console.log(`  ${path.join(options.output, 'program.json')} - JSON format`);
+          }
           
           if (config.generateReport) {
             console.log(`  ${path.join(options.output, 'assembly_report.txt')} - Assembly report`);

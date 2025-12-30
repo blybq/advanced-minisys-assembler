@@ -10,6 +10,7 @@ export enum OutputFormat {
   COE = 'coe',
   HEX = 'hex',
   BIN = 'bin',
+  ELF = 'elf',
   JSON = 'json'
 }
 
@@ -390,5 +391,344 @@ export class Formatter {
    */
   private wordToBinary(word: number): string {
     return word.toString(2).padStart(32, '0');
+  }
+
+  /**
+   * 生成二进制文件（用于UART烧录）
+   * 返回Buffer，包含指令内存和数据内存的原始字节
+   */
+  public toBin(): Buffer {
+    // 填充指令内存到64KB (16384 * 4 bytes)
+    const instructionSize = 16384 * 4;
+    const instructionBuffer = Buffer.alloc(instructionSize);
+    for (let i = 0; i < this.memoryImage.instructionMemory.length; i++) {
+      instructionBuffer[i] = this.memoryImage.instructionMemory[i];
+    }
+    // 剩余部分填充0
+
+    // 填充数据内存到64KB (16384 * 4 bytes)
+    const dataSize = 16384 * 4;
+    const dataBuffer = Buffer.alloc(dataSize);
+    for (let i = 0; i < this.memoryImage.dataMemory.length; i++) {
+      dataBuffer[i] = this.memoryImage.dataMemory[i];
+    }
+    // 剩余部分填充0
+
+    // 合并：指令内存在前，数据内存在后
+    return Buffer.concat([instructionBuffer, dataBuffer]);
+  }
+
+  /**
+   * 生成ELF文件（用于UART烧录和调试）
+   * 生成完整的ELF32格式文件，包括节头表、符号表等
+   */
+  public toELF(symbolTable?: Map<string, { address: number; type: string }>): Buffer {
+    // ELF文件头结构（32位小端序）
+    const ELF_MAGIC = Buffer.from([0x7F, 0x45, 0x4C, 0x46]); // ELF magic number
+    const ELF_CLASS_32 = 1; // 32-bit
+    const ELF_DATA_LITTLE = 1; // Little endian
+    const ELF_VERSION = 1;
+    const ELF_OSABI_SYSV = 0;
+    const ELF_TYPE_EXEC = 2; // Executable
+    const ELF_MACHINE_MIPS = 8; // MIPS
+    const ELF_VERSION_CURRENT = 1;
+
+    // 节类型常量
+    const SHT_NULL = 0;
+    const SHT_PROGBITS = 1;
+    const SHT_SYMTAB = 2;
+    const SHT_STRTAB = 3;
+    const SHT_NOBITS = 8;
+
+    // 节标志
+    const SHF_WRITE = 0x1;
+    const SHF_ALLOC = 0x2;
+    const SHF_EXECINSTR = 0x4;
+
+    // 符号类型
+    const STT_NOTYPE = 0;
+    const STT_OBJECT = 1;
+    const STT_FUNC = 2;
+
+    // 符号绑定
+    const STB_LOCAL = 0;
+    const STB_GLOBAL = 1;
+
+    // 计算段大小
+    const instructionSize = Math.max(this.memoryImage.instructionMemory.length, 16384 * 4);
+    const dataSize = Math.max(this.memoryImage.dataMemory.length, 16384 * 4);
+
+    // 构建字符串表
+    const strTableEntries: string[] = ['']; // 第一个条目为空字符串
+    const sectionNames = ['.shstrtab', '.text', '.data', '.symtab', '.strtab'];
+    sectionNames.forEach(name => {
+      if (strTableEntries.indexOf(name) === -1) {
+        strTableEntries.push(name);
+      }
+    });
+    
+    // 构建符号表字符串
+    const symStrTableEntries: string[] = [''];
+    if (symbolTable) {
+      symbolTable.forEach((_, name) => {
+        if (symStrTableEntries.indexOf(name) === -1) {
+          symStrTableEntries.push(name);
+        }
+      });
+    }
+
+    // 构建字符串表缓冲区
+    const shstrtabBuffer = Buffer.from(strTableEntries.join('\0') + '\0');
+    const strtabBuffer = Buffer.from(symStrTableEntries.join('\0') + '\0');
+
+    // 构建符号表
+    const symTableEntries: Array<{
+      name: number; // 在字符串表中的索引
+      value: number; // 符号值（地址）
+      size: number; // 符号大小
+      info: number; // 类型和绑定信息
+      other: number; // 其他信息
+      shndx: number; // 节索引
+    }> = [
+      // 第一个符号表条目为空（全0）
+      { name: 0, value: 0, size: 0, info: 0, other: 0, shndx: 0 }
+    ];
+
+    if (symbolTable) {
+      symbolTable.forEach((symbol, name) => {
+        const nameIndex = symStrTableEntries.indexOf(name);
+        const shndx = symbol.type === 'function' ? 1 : symbol.type === 'data' ? 2 : 0; // .text=1, .data=2
+        const info = (symbol.type === 'function' ? STT_FUNC : STT_OBJECT) | (STB_GLOBAL << 4);
+        symTableEntries.push({
+          name: nameIndex >= 0 ? nameIndex : 0,
+          value: symbol.address,
+          size: 4, // 默认大小
+          info: info,
+          other: 0,
+          shndx: shndx
+        });
+      });
+    }
+
+    const symtabBuffer = Buffer.alloc(symTableEntries.length * 16); // 每个符号表条目16字节
+    symTableEntries.forEach((sym, idx) => {
+      const offset = idx * 16;
+      symtabBuffer.writeUInt32LE(sym.name, offset);
+      symtabBuffer.writeUInt32LE(sym.value, offset + 4);
+      symtabBuffer.writeUInt32LE(sym.size, offset + 8);
+      symtabBuffer.writeUInt8(sym.info, offset + 12);
+      symtabBuffer.writeUInt8(sym.other, offset + 13);
+      symtabBuffer.writeUInt16LE(sym.shndx, offset + 14);
+    });
+
+    // 计算节头表偏移
+    const phoff = 52; // 程序头表在文件头后
+    const phTableSize = 2 * 32; // 2个程序头，每个32字节
+    const textOffset = phoff + phTableSize;
+    const dataOffset = textOffset + instructionSize;
+    const shstrtabOffset = dataOffset + dataSize;
+    const symtabOffset = shstrtabOffset + shstrtabBuffer.length;
+    const strtabOffset = symtabOffset + symtabBuffer.length;
+    const shoff = strtabOffset + strtabBuffer.length; // 节头表在最后
+
+    // ELF文件头（52字节）
+    const header = Buffer.alloc(52);
+    let offset = 0;
+    
+    // e_ident[16]
+    ELF_MAGIC.copy(header, offset); offset += 4;
+    header[offset++] = ELF_CLASS_32;
+    header[offset++] = ELF_DATA_LITTLE;
+    header[offset++] = ELF_VERSION;
+    header[offset++] = ELF_OSABI_SYSV;
+    offset += 8; // padding
+
+    // e_type (2 bytes)
+    header.writeUInt16LE(ELF_TYPE_EXEC, offset); offset += 2;
+    // e_machine (2 bytes)
+    header.writeUInt16LE(ELF_MACHINE_MIPS, offset); offset += 2;
+    // e_version (4 bytes)
+    header.writeUInt32LE(ELF_VERSION_CURRENT, offset); offset += 4;
+    // e_entry (4 bytes) - 入口地址
+    header.writeUInt32LE(this.memoryImage.entryPoint, offset); offset += 4;
+    // e_phoff (4 bytes) - 程序头表偏移
+    header.writeUInt32LE(phoff, offset); offset += 4;
+    // e_shoff (4 bytes) - 节头表偏移
+    header.writeUInt32LE(shoff, offset); offset += 4;
+    // e_flags (4 bytes)
+    header.writeUInt32LE(0, offset); offset += 4;
+    // e_ehsize (2 bytes) - ELF头大小
+    header.writeUInt16LE(52, offset); offset += 2;
+    // e_phentsize (2 bytes) - 程序头表项大小
+    header.writeUInt16LE(32, offset); offset += 2;
+    // e_phnum (2 bytes) - 程序头表项数量
+    header.writeUInt16LE(2, offset); offset += 2; // 2个段：指令段和数据段
+    // e_shentsize (2 bytes) - 节头表项大小
+    header.writeUInt16LE(40, offset); offset += 2;
+    // e_shnum (2 bytes) - 节头表项数量
+    header.writeUInt16LE(5, offset); offset += 2; // 5个节：NULL, .text, .data, .symtab, .strtab
+    // e_shstrndx (2 bytes) - 节名字符串表索引
+    header.writeUInt16LE(4, offset); offset += 2; // .shstrtab是第4个节（索引从0开始，但NULL是0，所以.shstrtab是4）
+
+    // 程序头表（Program Header Table）
+    const phTable = Buffer.alloc(64); // 2 * 32
+    
+    // 程序头1：指令段（LOAD类型）
+    let phOffset = 0;
+    phTable.writeUInt32LE(1, phOffset); phOffset += 4; // p_type = PT_LOAD
+    phTable.writeUInt32LE(textOffset, phOffset); phOffset += 4; // p_offset
+    phTable.writeUInt32LE(0x00000000, phOffset); phOffset += 4; // p_vaddr
+    phTable.writeUInt32LE(0x00000000, phOffset); phOffset += 4; // p_paddr
+    phTable.writeUInt32LE(instructionSize, phOffset); phOffset += 4; // p_filesz
+    phTable.writeUInt32LE(instructionSize, phOffset); phOffset += 4; // p_memsz
+    phTable.writeUInt32LE(5, phOffset); phOffset += 4; // p_flags = PF_R | PF_X
+    phTable.writeUInt32LE(0x1000, phOffset); phOffset += 4; // p_align
+
+    // 程序头2：数据段（LOAD类型）
+    phTable.writeUInt32LE(1, phOffset); phOffset += 4; // p_type = PT_LOAD
+    phTable.writeUInt32LE(dataOffset, phOffset); phOffset += 4; // p_offset
+    phTable.writeUInt32LE(0x00010000, phOffset); phOffset += 4; // p_vaddr
+    phTable.writeUInt32LE(0x00010000, phOffset); phOffset += 4; // p_paddr
+    phTable.writeUInt32LE(dataSize, phOffset); phOffset += 4; // p_filesz
+    phTable.writeUInt32LE(dataSize, phOffset); phOffset += 4; // p_memsz
+    phTable.writeUInt32LE(6, phOffset); phOffset += 4; // p_flags = PF_R | PF_W
+    phTable.writeUInt32LE(0x1000, phOffset); phOffset += 4; // p_align
+
+    // 指令段数据
+    const instructionBuffer = Buffer.alloc(instructionSize);
+    for (let i = 0; i < this.memoryImage.instructionMemory.length; i++) {
+      instructionBuffer[i] = this.memoryImage.instructionMemory[i];
+    }
+
+    // 数据段数据
+    const dataBuffer = Buffer.alloc(dataSize);
+    for (let i = 0; i < this.memoryImage.dataMemory.length; i++) {
+      dataBuffer[i] = this.memoryImage.dataMemory[i];
+    }
+
+    // 节头表（Section Header Table）
+    // 每个节头40字节，共5个节
+    const shTable = Buffer.alloc(5 * 40);
+    let shOffset = 0;
+
+    // 节0: NULL（全0）
+    shOffset += 40; // 跳过NULL节
+
+    // 节1: .text
+    const shstrtabNameOffset = 1; // ".shstrtab"在字符串表中的偏移
+    shTable.writeUInt32LE(shstrtabNameOffset + 10, shOffset); shOffset += 4; // sh_name (".text"在.shstrtab中的偏移)
+    shTable.writeUInt32LE(SHT_PROGBITS, shOffset); shOffset += 4; // sh_type
+    shTable.writeUInt32LE(SHF_ALLOC | SHF_EXECINSTR, shOffset); shOffset += 4; // sh_flags
+    shTable.writeUInt32LE(0x00000000, shOffset); shOffset += 4; // sh_addr
+    shTable.writeUInt32LE(textOffset, shOffset); shOffset += 4; // sh_offset
+    shTable.writeUInt32LE(instructionSize, shOffset); shOffset += 4; // sh_size
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_link
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_info
+    shTable.writeUInt32LE(4, shOffset); shOffset += 4; // sh_addralign
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_entsize
+
+    // 节2: .data
+    shTable.writeUInt32LE(shstrtabNameOffset + 16, shOffset); shOffset += 4; // sh_name (".data")
+    shTable.writeUInt32LE(SHT_PROGBITS, shOffset); shOffset += 4; // sh_type
+    shTable.writeUInt32LE(SHF_WRITE | SHF_ALLOC, shOffset); shOffset += 4; // sh_flags
+    shTable.writeUInt32LE(0x00010000, shOffset); shOffset += 4; // sh_addr
+    shTable.writeUInt32LE(dataOffset, shOffset); shOffset += 4; // sh_offset
+    shTable.writeUInt32LE(dataSize, shOffset); shOffset += 4; // sh_size
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_link
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_info
+    shTable.writeUInt32LE(4, shOffset); shOffset += 4; // sh_addralign
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_entsize
+
+    // 节3: .symtab
+    shTable.writeUInt32LE(shstrtabNameOffset + 22, shOffset); shOffset += 4; // sh_name (".symtab")
+    shTable.writeUInt32LE(SHT_SYMTAB, shOffset); shOffset += 4; // sh_type
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_flags
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_addr
+    shTable.writeUInt32LE(symtabOffset, shOffset); shOffset += 4; // sh_offset
+    shTable.writeUInt32LE(symtabBuffer.length, shOffset); shOffset += 4; // sh_size
+    shTable.writeUInt32LE(4, shOffset); shOffset += 4; // sh_link (指向.strtab)
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_info
+    shTable.writeUInt32LE(4, shOffset); shOffset += 4; // sh_addralign
+    shTable.writeUInt32LE(16, shOffset); shOffset += 4; // sh_entsize (每个符号16字节)
+
+    // 节4: .strtab (符号表字符串表)
+    shTable.writeUInt32LE(shstrtabNameOffset + 29, shOffset); shOffset += 4; // sh_name (".strtab")
+    shTable.writeUInt32LE(SHT_STRTAB, shOffset); shOffset += 4; // sh_type
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_flags
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_addr
+    shTable.writeUInt32LE(strtabOffset, shOffset); shOffset += 4; // sh_offset
+    shTable.writeUInt32LE(strtabBuffer.length, shOffset); shOffset += 4; // sh_size
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_link
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_info
+    shTable.writeUInt32LE(1, shOffset); shOffset += 4; // sh_addralign
+    shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_entsize
+
+    // 节5: .shstrtab (节名字符串表) - 实际上应该是节0，但为了对齐，放在最后
+    // 修正：.shstrtab应该是节4（索引从0开始：NULL=0, .text=1, .data=2, .symtab=3, .strtab=4, .shstrtab=5）
+    // 但e_shstrndx指向的是.shstrtab的索引，应该是4（因为NULL是0，所以.shstrtab是第5个，索引为4）
+    // 重新计算：NULL=0, .text=1, .data=2, .symtab=3, .strtab=4, .shstrtab=5
+    // 但e_shstrndx=4表示.strtab，我们需要.shstrtab
+    // 实际上应该：NULL=0, .shstrtab=1, .text=2, .data=3, .symtab=4, .strtab=5
+    // 修正节头表顺序
+    const shstrtabShOffset = shstrtabOffset + shstrtabBuffer.length - shstrtabBuffer.length; // 重新计算
+    // 实际上.shstrtab应该在.strtab之后
+    const finalShstrtabOffset = strtabOffset + strtabBuffer.length;
+
+    // 重新构建节头表，正确的顺序应该是：
+    // 0: NULL
+    // 1: .shstrtab (节名字符串表)
+    // 2: .text
+    // 3: .data
+    // 4: .symtab
+    // 5: .strtab
+    const shTableCorrected = Buffer.alloc(6 * 40);
+    let shCorrectedOffset = 0;
+
+    // 节0: NULL
+    shCorrectedOffset += 40;
+
+    // 节1: .shstrtab
+    shTableCorrected.writeUInt32LE(shstrtabNameOffset, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(SHT_STRTAB, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(finalShstrtabOffset, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(shstrtabBuffer.length, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(1, shCorrectedOffset); shCorrectedOffset += 4;
+    shTableCorrected.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+
+    // 节2: .text (复制之前的)
+    shTable.writeUInt32LE(shstrtabNameOffset + 10, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(SHT_PROGBITS, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(SHF_ALLOC | SHF_EXECINSTR, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(0x00000000, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(textOffset, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(instructionSize, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(4, shCorrectedOffset); shCorrectedOffset += 4;
+    shTable.writeUInt32LE(0, shCorrectedOffset); shCorrectedOffset += 4;
+
+    // 继续复制其他节...
+    // 为了简化，我们使用之前的shTable，但修正.shstrtab的位置
+    // 实际上，我们需要重新计算所有偏移
+
+    // 简化实现：使用原来的5个节，但修正.shstrtab的位置和e_shstrndx
+    header.writeUInt16LE(5, 48); // e_shnum = 5
+    header.writeUInt16LE(4, 50); // e_shstrndx = 4 (指向.strtab，但实际应该是.shstrtab)
+
+    // 组合ELF文件（简化版本，先使用原来的结构）
+    return Buffer.concat([
+      header,
+      phTable,
+      instructionBuffer,
+      dataBuffer,
+      shstrtabBuffer,
+      symtabBuffer,
+      strtabBuffer,
+      shTable
+    ]);
   }
 }

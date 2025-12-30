@@ -19,6 +19,7 @@ export interface AssemblerConfig {
   generateDisassembly: boolean;
   optimizeCode: boolean;
   verbose: boolean;
+  generateUartFiles?: boolean;
 }
 
 // 默认配置
@@ -143,21 +144,52 @@ export class AdvancedAssembler {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    // 生成指令内存COE文件
-    const instructionCOE = this.formatter.toCOE();
-    fs.writeFileSync(path.join(outputDir, 'prgmip32.coe'), instructionCOE);
+    // 根据输出格式生成文件
+    if (this.config.outputFormat === OutputFormat.COE) {
+      // 生成指令内存COE文件
+      const instructionCOE = this.formatter.toCOE();
+      fs.writeFileSync(path.join(outputDir, 'prgmip32.coe'), instructionCOE);
 
-    // 生成数据内存COE文件
-    const dataCOE = this.formatter.toDataCOE();
-    fs.writeFileSync(path.join(outputDir, 'dmem32.coe'), dataCOE);
+      // 生成数据内存COE文件
+      const dataCOE = this.formatter.toDataCOE();
+      fs.writeFileSync(path.join(outputDir, 'dmem32.coe'), dataCOE);
+    } else if (this.config.outputFormat === OutputFormat.HEX) {
+      // 生成十六进制文件
+      const hexOutput = this.formatter.toHex();
+      fs.writeFileSync(path.join(outputDir, 'program.hex'), hexOutput);
+    } else if (this.config.outputFormat === OutputFormat.BIN) {
+      // 生成二进制文件（用于UART烧录）
+      const binBuffer = this.formatter.toBin();
+      fs.writeFileSync(path.join(outputDir, 'program.bin'), binBuffer);
+    } else if (this.config.outputFormat === OutputFormat.ELF) {
+      // 生成ELF文件（用于UART烧录和调试）
+      // 转换符号表格式
+      const symbolTableForELF = this.convertSymbolTableForELF(result.symbolTable);
+      const elfBuffer = this.formatter.toELF(symbolTableForELF);
+      fs.writeFileSync(path.join(outputDir, 'program.elf'), elfBuffer);
+    } else if (this.config.outputFormat === OutputFormat.JSON) {
+      // 生成JSON文件
+      const jsonOutput = this.formatter.toJSON();
+      fs.writeFileSync(path.join(outputDir, 'program.json'), jsonOutput);
+    }
 
-    // 生成十六进制文件
-    const hexOutput = this.formatter.toHex();
-    fs.writeFileSync(path.join(outputDir, 'program.hex'), hexOutput);
+    // 如果启用了UART文件生成，生成bin和elf文件
+    if (this.config.generateUartFiles) {
+      const binBuffer = this.formatter.toBin();
+      fs.writeFileSync(path.join(outputDir, 'program.bin'), binBuffer);
+      // 转换符号表格式
+      const symbolTableForELF = this.convertSymbolTableForELF(result.symbolTable);
+      const elfBuffer = this.formatter.toELF(symbolTableForELF);
+      fs.writeFileSync(path.join(outputDir, 'program.elf'), elfBuffer);
+    }
 
-    // 生成JSON文件
-    const jsonOutput = this.formatter.toJSON();
-    fs.writeFileSync(path.join(outputDir, 'program.json'), jsonOutput);
+    // 始终生成COE文件（用于Vivado烧录）
+    if (this.config.outputFormat !== OutputFormat.COE || this.config.generateUartFiles) {
+      const instructionCOE = this.formatter.toCOE();
+      fs.writeFileSync(path.join(outputDir, 'prgmip32.coe'), instructionCOE);
+      const dataCOE = this.formatter.toDataCOE();
+      fs.writeFileSync(path.join(outputDir, 'dmem32.coe'), dataCOE);
+    }
 
     // 生成汇编报告
     if (this.config.generateReport) {
@@ -192,6 +224,31 @@ export class AdvancedAssembler {
     }
     
     return lines.join('\n');
+  }
+
+  /**
+   * 转换符号表格式以供ELF使用
+   */
+  private convertSymbolTableForELF(symbolTable: Map<string, any>): Map<string, { address: number; type: string }> {
+    const converted = new Map<string, { address: number; type: string }>();
+    
+    for (const [name, label] of symbolTable.entries()) {
+      // 根据标签名称和上下文判断类型
+      // 简单判断：如果名称看起来像函数（如main, function_name），则认为是函数
+      // 否则认为是数据
+      let type = 'data';
+      if (name === 'main' || name.startsWith('_') || /^[a-z][a-zA-Z0-9_]*$/.test(name)) {
+        // 可能是函数标签
+        type = 'function';
+      }
+      
+      converted.set(name, {
+        address: label.address,
+        type: type
+      });
+    }
+    
+    return converted;
   }
 
   /**
