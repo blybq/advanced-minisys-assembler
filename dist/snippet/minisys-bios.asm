@@ -12,7 +12,7 @@
 
     addi $s6,$zero,8 # off
 _bios_label1:
-    addi $s1,$zero,5        # S
+    addi $s1,$zero,2        # 2
     addi $s2,$zero,7 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -21,7 +21,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,14       # E
+    addi $s1,$zero,0       # 0
     addi $s2,$zero,6 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -30,7 +30,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,16       # U
+    addi $s1,$zero,2       # 2
     addi $s2,$zero,5 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -39,7 +39,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,0        # 0
+    addi $s1,$zero,6        # 6
     addi $s2,$zero,4 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -48,7 +48,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,9        # 9
+    addi $s1,$zero,0        # 0
     addi $s2,$zero,3 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -66,7 +66,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,7        # 7
+    addi $s1,$zero,0        # 0
     addi $s2,$zero,1 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
@@ -75,7 +75,7 @@ _bios_label1:
     nop
     sw   $s6,0($s4)
     nop
-    addi $s1,$zero,2        # 2
+    addi $s1,$zero,1        # 1
     addi $s2,$zero,0 # loc
     sw   $s1,0($s3)
     sw   $s2,0($s4)
