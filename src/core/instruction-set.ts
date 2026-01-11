@@ -42,6 +42,19 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
     encoding: 'R'
   },
   {
+    mnemonic: 'addu',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x21,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
+    ],
+    description: 'Add registers unsigned',
+    encoding: 'R'
+  },
+  {
     mnemonic: 'sub',
     type: InstructionType.R_TYPE,
     opcode: 0,
@@ -52,6 +65,19 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
       { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
     ],
     description: 'Subtract registers',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'subu',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x23,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
+    ],
+    description: 'Subtract registers unsigned',
     encoding: 'R'
   },
   {
@@ -118,6 +144,18 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
     encoding: 'R'
   },
   {
+    mnemonic: 'jalr',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x09,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Jump and link register',
+    encoding: 'R'
+  },
+  {
     mnemonic: 'mult',
     type: InstructionType.R_TYPE,
     opcode: 0,
@@ -130,6 +168,18 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
     encoding: 'R'
   },
   {
+    mnemonic: 'multu',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x19,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
+    ],
+    description: 'Multiply unsigned',
+    encoding: 'R'
+  },
+  {
     mnemonic: 'div',
     type: InstructionType.R_TYPE,
     opcode: 0,
@@ -139,6 +189,18 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
       { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
     ],
     description: 'Divide',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'divu',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x1B,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true }
+    ],
+    description: 'Divide unsigned',
     encoding: 'R'
   },
   {
@@ -161,6 +223,28 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
       { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true }
     ],
     description: 'Move from LO',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'mthi',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x11,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Move to HI',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'mtlo',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x13,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Move to LO',
     encoding: 'R'
   },
 
@@ -314,6 +398,15 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
     description: 'System call',
     encoding: 'R'
   },
+  {
+    mnemonic: 'break',
+    type: InstructionType.SPECIAL,
+    opcode: 0,
+    funct: 0x0D,
+    operands: [],
+    description: 'Breakpoint',
+    encoding: 'R'
+  },
   // CP0指令
   {
     mnemonic: 'mfc0',
@@ -411,6 +504,45 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
       { type: OperandType.IMMEDIATE, name: 'shamt', bits: 5, position: 6, required: true }
     ],
     description: 'Shift right arithmetic',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'sllv',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x04,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Shift left logical variable',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'srlv',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x06,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Shift right logical variable',
+    encoding: 'R'
+  },
+  {
+    mnemonic: 'srav',
+    type: InstructionType.R_TYPE,
+    opcode: 0,
+    funct: 0x07,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rd', bits: 5, position: 11, required: true },
+      { type: OperandType.REGISTER, name: 'rt', bits: 5, position: 16, required: true },
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true }
+    ],
+    description: 'Shift right arithmetic variable',
     encoding: 'R'
   },
   // 更多I型指令
@@ -565,6 +697,28 @@ export const INSTRUCTION_SET: InstructionDefinition[] = [
       { type: OperandType.LABEL, name: 'label', bits: 16, position: 0, required: true }
     ],
     description: 'Branch if greater than or equal to zero',
+    encoding: 'I'
+  },
+  {
+    mnemonic: 'bgezal',
+    type: InstructionType.I_TYPE,
+    opcode: 0x01,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.LABEL, name: 'label', bits: 16, position: 0, required: true }
+    ],
+    description: 'Branch if greater than or equal to zero and link',
+    encoding: 'I'
+  },
+  {
+    mnemonic: 'bltzal',
+    type: InstructionType.I_TYPE,
+    opcode: 0x01,
+    operands: [
+      { type: OperandType.REGISTER, name: 'rs', bits: 5, position: 21, required: true },
+      { type: OperandType.LABEL, name: 'label', bits: 16, position: 0, required: true }
+    ],
+    description: 'Branch if less than zero and link',
     encoding: 'I'
   }
 ];

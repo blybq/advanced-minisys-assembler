@@ -25,6 +25,7 @@ program
   .option('-f, --format <format>', 'Output format (coe, hex, bin, elf, json)', 'coe')
   .option('--uart', 'Generate files for UART programming (bin and elf)', false)
   .option('-l, --link', 'Link with BIOS and interrupt handlers', false)
+  .option('-i, --interrupt-files', 'Look for custom interrupt files (minisys-interrupt-entry.asm and minisys-interrupt-handler.asm) in input file directory', true)
   .option('-r, --report', 'Generate assembly report', true)
   .option('-d, --disassembly', 'Generate disassembly', false)
   .option('-v, --verbose', 'Verbose output', false)
@@ -48,9 +49,45 @@ program
         }
 
         try {
+          // 确定中断文件的路径
+          let customIntEntryPath: string | undefined;
+          let customIntHandlerPath: string | undefined;
+          
+          // 检查是否启用自定义中断文件查找（默认为 true）
+          // 如果用户未指定 -i，options.interruptFiles 为 undefined，我们将其视为 true
+          // 如果用户指定了 -i，options.interruptFiles 为 true
+          // 如果用户指定了 --no-interrupt-files，options.interruptFiles 为 false
+          const useCustomInterruptFiles = options.interruptFiles !== false;
+          
+          if (useCustomInterruptFiles) {
+            const inputDir = path.dirname(path.resolve(input));
+            const customIntEntry = path.join(inputDir, 'minisys-interrupt-entry.asm');
+            const customIntHandler = path.join(inputDir, 'minisys-interrupt-handler.asm');
+            
+            // 检查自定义文件是否存在
+            if (fs.existsSync(customIntEntry) && fs.existsSync(customIntHandler)) {
+              customIntEntryPath = customIntEntry;
+              customIntHandlerPath = customIntHandler;
+              if (options.verbose) {
+                console.log(chalk.green(`  Using custom interrupt files from: ${inputDir}`));
+                console.log(`    - ${path.basename(customIntEntry)}`);
+                console.log(`    - ${path.basename(customIntHandler)}`);
+              }
+            } else {
+              if (options.verbose) {
+                console.log(chalk.yellow(`  Custom interrupt files not found in: ${inputDir}`));
+                console.log('  Using default interrupt files');
+              }
+            }
+          } else {
+            if (options.verbose) {
+              console.log('  Custom interrupt files disabled, using default files');
+            }
+          }
+          
           // 加载系统文件
           const snippetDir = path.join(__dirname, '../snippet');
-          const systemFiles = loadSystemFiles(snippetDir);
+          const systemFiles = loadSystemFiles(snippetDir, customIntEntryPath, customIntHandlerPath);
 
           // 提取用户程序的数据段和代码段
           const userLines = source.replace(/\r\n/g, '\n').trim().split('\n');

@@ -186,8 +186,15 @@ export function linkAll(
 
 /**
  * 从文件读取BIOS、中断处理程序等系统文件
+ * @param snippetDir 默认的snippet目录（用于BIOS和默认的中断文件）
+ * @param customIntEntryPath 自定义的中断入口文件路径（可选）
+ * @param customIntHandlerPath 自定义的中断处理程序文件路径（可选）
  */
-export function loadSystemFiles(snippetDir?: string): {
+export function loadSystemFiles(
+  snippetDir?: string,
+  customIntEntryPath?: string,
+  customIntHandlerPath?: string
+): {
   bios: string;
   intEntry: string;
   intHandler: string;
@@ -217,8 +224,23 @@ export function loadSystemFiles(snippetDir?: string): {
   }
   
   const biosPath = path.join(defaultSnippetDir, 'minisys-bios.asm');
-  const intEntryPath = path.join(defaultSnippetDir, 'minisys-interrupt-entry.asm');
-  const intHandlerPath = path.join(defaultSnippetDir, 'minisys-interrupt-handler.asm');
+  
+  // 确定中断入口和处理程序文件的路径
+  // 如果提供了自定义路径且文件存在，使用自定义路径；否则使用默认路径
+  let intEntryPath: string;
+  let intHandlerPath: string;
+  
+  if (customIntEntryPath && fs.existsSync(customIntEntryPath)) {
+    intEntryPath = customIntEntryPath;
+  } else {
+    intEntryPath = path.join(defaultSnippetDir, 'minisys-interrupt-entry.asm');
+  }
+  
+  if (customIntHandlerPath && fs.existsSync(customIntHandlerPath)) {
+    intHandlerPath = customIntHandlerPath;
+  } else {
+    intHandlerPath = path.join(defaultSnippetDir, 'minisys-interrupt-handler.asm');
+  }
 
   if (!fs.existsSync(biosPath)) {
     throw new Error(`BIOS文件不存在: ${biosPath}`);
