@@ -185,6 +185,128 @@ export function linkAll(
 }
 
 /**
+ * 合并用户自定义的中断入口文件与默认的 syscall 部分
+ * 用户只能定义中断号 0-4，syscall（中断号5）是固定的
+ */
+function mergeInterruptEntry(
+  userEntryContent: string,
+  syscallEntryLine: string
+): string {
+  const lines = userEntryContent.split('\n');
+  const resultLines: string[] = [];
+  
+  // 提取用户定义的中断向量（最多 5 个：0-4）
+  // 只提取 j 指令或 nop 指令，忽略注释和其他内容
+  let userVectorCount = 0;
+  let hasStartedVectors = false;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // 如果是注释或空行，在向量定义之前保留
+    if (!trimmed || trimmed.startsWith('#')) {
+      if (!hasStartedVectors) {
+        resultLines.push(line);
+      }
+      continue;
+    }
+    
+    // 检查是否是中断向量（j 指令或 nop）
+    if (trimmed.startsWith('j ') || trimmed === 'nop' || trimmed.startsWith('nop ')) {
+      hasStartedVectors = true;
+      if (userVectorCount < 5) {
+        resultLines.push(line);
+        userVectorCount++;
+      }
+    } else {
+      // 其他行（如标签）在向量定义之前保留
+      if (!hasStartedVectors) {
+        resultLines.push(line);
+      }
+    }
+  }
+  
+  // 如果用户没有定义满 5 个中断向量，用 nop 填充
+  while (userVectorCount < 5) {
+    resultLines.push('nop');
+    userVectorCount++;
+  }
+  
+  // 追加 syscall 的中断向量（中断号5）
+  resultLines.push(syscallEntryLine);
+  
+  return resultLines.join('\n');
+}
+
+/**
+ * 合并用户自定义的中断处理程序与默认的 syscall 处理程序
+ * 用户只能定义 interruptServer0-interruptServer4，_syscall 是固定的
+ */
+function mergeInterruptHandler(
+  userHandlerContent: string,
+  defaultHandlerContent: string
+): string {
+  // 提取默认的 _syscall 部分
+  const defaultLines = defaultHandlerContent.split('\n');
+  let syscallStartIndex = -1;
+  
+  for (let i = 0; i < defaultLines.length; i++) {
+    const line = defaultLines[i].trim();
+    if (line === '_syscall:' || line.startsWith('_syscall:')) {
+      syscallStartIndex = i;
+      break;
+    }
+  }
+  
+  // 提取 _syscall 部分的完整内容（从 _syscall: 标签到文件末尾）
+  const syscallPart = syscallStartIndex !== -1 
+    ? defaultLines.slice(syscallStartIndex).join('\n').trim()
+    : '';
+  
+  // 合并用户处理程序和 syscall 处理程序
+  // 移除用户文件中可能存在的 _syscall 标签和处理程序
+  const userLines = userHandlerContent.split('\n');
+  const cleanedUserLines: string[] = [];
+  let inSyscallSection = false;
+  
+  for (const line of userLines) {
+    const trimmed = line.trim();
+    
+    // 如果遇到 _syscall 标签，开始跳过
+    if (trimmed === '_syscall:' || trimmed.startsWith('_syscall:')) {
+      inSyscallSection = true;
+      continue; // 跳过用户定义的 _syscall 标签
+    }
+    
+    // 如果遇到下一个标签（但不是 _syscall），结束 _syscall 部分
+    if (inSyscallSection && trimmed && !trimmed.startsWith('#') && trimmed.endsWith(':')) {
+      if (!trimmed.startsWith('_syscall')) {
+        inSyscallSection = false;
+        cleanedUserLines.push(line); // 保留下一个标签
+      }
+      continue;
+    }
+    
+    // 如果不在 _syscall 部分，保留该行
+    if (!inSyscallSection) {
+      cleanedUserLines.push(line);
+    }
+  }
+  
+  // 组合结果：用户定义的处理程序 + 默认的 _syscall 部分
+  let result = cleanedUserLines.join('\n').trim();
+  if (syscallPart) {
+    // 确保结果以换行结尾，然后添加 _syscall 部分
+    if (result && !result.endsWith('\n')) {
+      result += '\n';
+    }
+    result += '\n' + syscallPart;
+  }
+  
+  return result;
+}
+
+/**
  * 从文件读取BIOS、中断处理程序等系统文件
  * @param snippetDir 默认的snippet目录（用于BIOS和默认的中断文件）
  * @param customIntEntryPath 自定义的中断入口文件路径（可选）
@@ -245,16 +367,54 @@ export function loadSystemFiles(
   if (!fs.existsSync(biosPath)) {
     throw new Error(`BIOS文件不存在: ${biosPath}`);
   }
-  if (!fs.existsSync(intEntryPath)) {
-    throw new Error(`中断入口文件不存在: ${intEntryPath}`);
+  
+  // 读取默认的中断文件（用于提取 syscall 部分）
+  const defaultIntEntryPath = path.join(defaultSnippetDir, 'minisys-interrupt-entry.asm');
+  const defaultIntHandlerPath = path.join(defaultSnippetDir, 'minisys-interrupt-handler.asm');
+  
+  if (!fs.existsSync(defaultIntEntryPath)) {
+    throw new Error(`默认中断入口文件不存在: ${defaultIntEntryPath}`);
   }
-  if (!fs.existsSync(intHandlerPath)) {
-    throw new Error(`中断处理程序文件不存在: ${intHandlerPath}`);
+  if (!fs.existsSync(defaultIntHandlerPath)) {
+    throw new Error(`默认中断处理程序文件不存在: ${defaultIntHandlerPath}`);
+  }
+  
+  const defaultIntEntry = fs.readFileSync(defaultIntEntryPath, 'utf-8');
+  const defaultIntHandler = fs.readFileSync(defaultIntHandlerPath, 'utf-8');
+  
+  // 提取默认的 syscall 中断向量（中断号5）
+  const defaultEntryLines = defaultIntEntry.split('\n');
+  let syscallEntryLine = 'j _syscall            # 中断号5：syscall（作为异常处理）（0xF000 + 5*4 = 0xF014）';
+  for (const line of defaultEntryLines) {
+    if (line.includes('_syscall') && line.trim().startsWith('j')) {
+      syscallEntryLine = line.trim();
+      break;
+    }
+  }
+  
+  let finalIntEntry: string;
+  let finalIntHandler: string;
+  
+  // 如果提供了自定义文件，需要合并
+  if (customIntEntryPath && customIntHandlerPath && 
+      fs.existsSync(customIntEntryPath) && fs.existsSync(customIntHandlerPath)) {
+    const userIntEntry = fs.readFileSync(customIntEntryPath, 'utf-8');
+    const userIntHandler = fs.readFileSync(customIntHandlerPath, 'utf-8');
+    
+    // 合并中断入口文件（用户定义的 0-4 + 默认的 syscall）
+    finalIntEntry = mergeInterruptEntry(userIntEntry, syscallEntryLine);
+    
+    // 合并中断处理程序文件（用户定义的 + 默认的 _syscall）
+    finalIntHandler = mergeInterruptHandler(userIntHandler, defaultIntHandler);
+  } else {
+    // 使用默认文件
+    finalIntEntry = defaultIntEntry;
+    finalIntHandler = defaultIntHandler;
   }
 
   return {
     bios: fs.readFileSync(biosPath, 'utf-8'),
-    intEntry: fs.readFileSync(intEntryPath, 'utf-8'),
-    intHandler: fs.readFileSync(intHandlerPath, 'utf-8')
+    intEntry: finalIntEntry,
+    intHandler: finalIntHandler
   };
 }

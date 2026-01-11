@@ -1,30 +1,9 @@
 # ===== minisys-interrupt-handler-entry.asm =====
-    push $t0
-    push $t1
-    push $t2
-    push $v0
-    push $s0
-
-    mfc0 $t0, $13, 0        # $t0 <- CP0 Cause
-    andi $t1, $t0, 0x007C   # keep only ExcCode[4:0] at Cause 2-6
-
-    lui $s0, 65535
-    ori $s0, $s0, 64608
-    addi $v0, $zero, 0x00FF
-    
-
-    addi $t2, $zero, 0x0020 # Cause 2-6 of syscall is 01000
-    beq $t1, $t2, _int_handler_syscall
-    nop
-
-    sw $v0, 0($s0)
-    # 如果不是syscall异常，恢复寄存器并返回
-    pop $s0
-    pop $v0
-    pop $t2
-    pop $t1
-    pop $t0
-    eret
-    nop
+# 中断向量表（IVBR = 0x0000F000）
+j interruptServer0    # 中断号0：时钟中断（0xF000 + 0*4 = 0xF000）
+j interruptServer1    # 中断号1：键盘中断（0xF000 + 1*4 = 0xF004）
+nop                   # 中断号2：预留（0xF000 + 2*4 = 0xF008）
+nop                   # 中断号3：预留（0xF000 + 3*4 = 0xF00C）
+nop                   # 中断号4：预留（0xF000 + 4*4 = 0xF010）
+j _syscall            # 中断号5：syscall（作为异常处理）（0xF000 + 5*4 = 0xF014）
 # ===== minisys-interrupt-handler-entry.asm =====
-
