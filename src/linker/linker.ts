@@ -55,7 +55,7 @@ export function countInstructions(asmCode: string): number {
     }
 
     // 展开伪指令并计算指令数
-    const expander = new PseudoExpander();
+    const expander = new PseudoExpander(context);
     let instructionCount = 0;
 
     for (const instruction of textSegment.instructions) {
@@ -70,9 +70,11 @@ export function countInstructions(asmCode: string): number {
       .split('\n')
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('#') && !line.startsWith('.'));
-
+    
     // 简单估算：每行一条指令（不考虑宏展开）
-    return lines.filter(line => !line.endsWith(':')).length;
+    const fallbackCount = lines.filter(line => !line.endsWith(':')).length;
+    
+    return fallbackCount;
   }
 }
 

@@ -535,6 +535,7 @@ export class Encoder {
       if (fixup.type === 'J') {
         const target = (labelInfo.address >>> 2) & 0x3FFFFFF;
         patchedWord = (currentWord & 0xFC000000) | target;
+        
       } else if (fixup.type === 'BRANCH') {
         const branchAddress = fixup.instructionIndex * 4;
         const offset = ((labelInfo.address - (branchAddress + 4)) >> 2) & 0xFFFF;

@@ -201,6 +201,21 @@ export class AdvancedAssembler {
     if (this.config.generateDisassembly) {
       const disassembly = this.formatter.disassemble();
       fs.writeFileSync(path.join(outputDir, 'disassembly.asm'), disassembly);
+      
+      // 如果生成了 COE 文件，也使用 disassembler.ts 生成 disassembled.txt
+      // 这样可以提供更准确的反汇编输出（从实际机器码反汇编）
+      if (this.config.outputFormat === OutputFormat.COE || this.config.generateUartFiles) {
+        const { disassembleCOE } = require('./verification/disassembler');
+        const coePath = path.join(outputDir, 'prgmip32.coe');
+        if (fs.existsSync(coePath)) {
+          try {
+            disassembleCOE(coePath, path.join(outputDir, 'disassembled.txt'));
+          } catch (error) {
+            // 如果反汇编失败，记录警告但不中断流程
+            console.warn(`Warning: Failed to generate disassembled.txt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+      }
     }
 
     // 生成符号表

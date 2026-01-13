@@ -16,6 +16,7 @@ import {
   REGISTER_NAMES
 } from '../core/types';
 import { INSTRUCTION_LOOKUP } from '../core/instruction-set';
+import { PseudoExpander } from '../expander/pseudo-expander';
 
 // 解析器类
 export class Parser {
@@ -24,6 +25,7 @@ export class Parser {
   private context: AssemblyContext;
   private errors: AssemblyError[] = [];
   private sourceLines: string[] = [];
+  private pseudoExpander: PseudoExpander;
 
   constructor() {
     this.context = {
@@ -34,6 +36,7 @@ export class Parser {
       errors: [],
       warnings: []
     };
+    this.pseudoExpander = new PseudoExpander(this.context);
   }
 
   /**
@@ -74,7 +77,7 @@ export class Parser {
     
     const dataSegment: Segment = {
       name: 'data',
-      startAddress: 0x00010000,
+      startAddress: 0x00000000,
       size: 0,
       instructions: [],
       data: [],
@@ -244,8 +247,10 @@ export class Parser {
     const currentSegment = this.context.segments.get(this.context.currentSegment)!;
     currentSegment.instructions.push(instruction);
     
-    // 更新程序计数器
-    this.context.programCounter += 4;
+    // 更新程序计数器：需要考虑伪指令展开
+    // 伪指令（如push、pop）会展开为多条真实指令，需要计算展开后的指令数
+    const expanded = this.pseudoExpander.expandPseudoInstruction(instruction);
+    this.context.programCounter += expanded.length * 4;
     
     // 跳过换行符
     if (this.match(TokenType.NEWLINE)) {
