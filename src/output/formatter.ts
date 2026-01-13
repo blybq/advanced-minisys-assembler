@@ -198,7 +198,7 @@ export class Formatter {
     lines.push('Memory Layout:');
     lines.push(`  0x00000000 - 0x${(0x00000000 + this.memoryImage.instructionMemory.length - 1).toString(16).toUpperCase()}: Instruction Memory`);
     if (this.memoryImage.dataMemory.length > 0) {
-      lines.push(`  0x00010000 - 0x${(0x00010000 + this.memoryImage.dataMemory.length - 1).toString(16).toUpperCase()}: Data Memory`);
+      lines.push(`  0x00000000 - 0x${(0x00000000 + this.memoryImage.dataMemory.length - 1).toString(16).toUpperCase()}: Data Memory`);
     }
     
     return lines.join('\n') + '\n';
@@ -587,8 +587,8 @@ export class Formatter {
     // 程序头2：数据段（LOAD类型）
     phTable.writeUInt32LE(1, phOffset); phOffset += 4; // p_type = PT_LOAD
     phTable.writeUInt32LE(dataOffset, phOffset); phOffset += 4; // p_offset
-    phTable.writeUInt32LE(0x00010000, phOffset); phOffset += 4; // p_vaddr
-    phTable.writeUInt32LE(0x00010000, phOffset); phOffset += 4; // p_paddr
+    phTable.writeUInt32LE(0x00000000, phOffset); phOffset += 4; // p_vaddr
+    phTable.writeUInt32LE(0x00000000, phOffset); phOffset += 4; // p_paddr
     phTable.writeUInt32LE(dataSize, phOffset); phOffset += 4; // p_filesz
     phTable.writeUInt32LE(dataSize, phOffset); phOffset += 4; // p_memsz
     phTable.writeUInt32LE(6, phOffset); phOffset += 4; // p_flags = PF_R | PF_W
@@ -631,7 +631,7 @@ export class Formatter {
     shTable.writeUInt32LE(shstrtabNameOffset + 16, shOffset); shOffset += 4; // sh_name (".data")
     shTable.writeUInt32LE(SHT_PROGBITS, shOffset); shOffset += 4; // sh_type
     shTable.writeUInt32LE(SHF_WRITE | SHF_ALLOC, shOffset); shOffset += 4; // sh_flags
-    shTable.writeUInt32LE(0x00010000, shOffset); shOffset += 4; // sh_addr
+    shTable.writeUInt32LE(0x00000000, shOffset); shOffset += 4; // sh_addr
     shTable.writeUInt32LE(dataOffset, shOffset); shOffset += 4; // sh_offset
     shTable.writeUInt32LE(dataSize, shOffset); shOffset += 4; // sh_size
     shTable.writeUInt32LE(0, shOffset); shOffset += 4; // sh_link
