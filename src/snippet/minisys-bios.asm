@@ -4,7 +4,7 @@
     addi $s1,$zero,0xFFFF
     addi $s7,$zero,0xFC60   # LED基址
     sw	 $s1,0($s7)         # LED全亮
-    # 数码管刷新SEU09172
+    # 数码管循环显示20260101
     # lui  $s5,8
     addi $s5,$zero,0x000A
     addi $s3,$zero,0xFC00   # 段码基址
