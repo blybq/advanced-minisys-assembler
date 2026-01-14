@@ -415,17 +415,17 @@ export function disassembleCOE(coeFilePath: string, outputFilePath?: string): st
 export function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
-    console.error('Usage: disassembler <coe_file> [output_file]');
+    console.error('用法：disassembler <coe_file> [output_file]');
     process.exit(1);
   }
 
   const coeFile = args[0];
   const outputFile = args[1] || coeFile.replace('.coe', '_disassembled.txt');
 
-  console.log(`Disassembling ${coeFile}...`);
+  console.log(`正在反汇编 ${coeFile}...`);
   const instructions = disassembleCOE(coeFile, outputFile);
-  console.log(`Disassembled ${instructions.length} instructions`);
-  console.log(`Output written to ${outputFile}`);
+  console.log(`已反汇编 ${instructions.length} 条指令`);
+  console.log(`输出已写入 ${outputFile}`);
 }
 
 if (require.main === module) {

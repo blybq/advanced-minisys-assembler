@@ -52,7 +52,7 @@ export class AdvancedAssembler {
     try {
       // 1. 解析阶段
       if (this.config.verbose) {
-        console.log('Parsing source code...');
+        console.log('正在解析源代码...');
       }
       
       const context = this.parser.parse(source);
@@ -70,7 +70,7 @@ export class AdvancedAssembler {
 
       // 2. 编码阶段
       if (this.config.verbose) {
-        console.log('Encoding instructions...');
+        console.log('正在编码指令...');
       }
       
       this.encoder = new Encoder(context);
@@ -89,7 +89,7 @@ export class AdvancedAssembler {
 
       // 3. 格式化阶段
       if (this.config.verbose) {
-        console.log('Formatting output...');
+        console.log('正在格式化输出...');
       }
       
       this.formatter = new Formatter(memoryImage);
@@ -212,7 +212,7 @@ export class AdvancedAssembler {
             disassembleCOE(coePath, path.join(outputDir, 'disassembled.txt'));
           } catch (error) {
             // 如果反汇编失败，记录警告但不中断流程
-            console.warn(`Warning: Failed to generate disassembled.txt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.warn(`警告：生成disassembled.txt失败：${error instanceof Error ? error.message : '未知错误'}`);
           }
         }
       }

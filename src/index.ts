@@ -34,7 +34,7 @@ program
     try {
       // 检查输入文件
       if (!fs.existsSync(input)) {
-        console.error(chalk.red(`Error: Input file '${input}' not found`));
+        console.error(chalk.red(`错误：未找到输入文件 '${input}'`));
         process.exit(1);
       }
 
@@ -44,8 +44,8 @@ program
       // 如果启用链接功能
       if (options.link) {
         if (options.verbose) {
-          console.log(chalk.blue('Linking mode enabled'));
-          console.log('  Loading BIOS and interrupt handlers...');
+          console.log(chalk.blue('已启用链接模式'));
+          console.log('  正在加载BIOS和中断处理程序...');
         }
 
         try {
@@ -69,19 +69,19 @@ program
               customIntEntryPath = customIntEntry;
               customIntHandlerPath = customIntHandler;
               if (options.verbose) {
-                console.log(chalk.green(`  Using custom interrupt files from: ${inputDir}`));
+                console.log(chalk.green(`  使用自定义中断文件，来源：${inputDir}`));
                 console.log(`    - ${path.basename(customIntEntry)}`);
                 console.log(`    - ${path.basename(customIntHandler)}`);
               }
             } else {
               if (options.verbose) {
-                console.log(chalk.yellow(`  Custom interrupt files not found in: ${inputDir}`));
-                console.log('  Using default interrupt files');
+                console.log(chalk.yellow(`  在以下位置未找到自定义中断文件：${inputDir}`));
+                console.log('  使用默认中断文件');
               }
             }
           } else {
             if (options.verbose) {
-              console.log('  Custom interrupt files disabled, using default files');
+              console.log('  已禁用自定义中断文件，使用默认文件');
             }
           }
           
@@ -132,11 +132,11 @@ program
           // 实际上，链接后的代码已经包含了正确的地址布局，所以不需要额外偏移
 
           if (options.verbose) {
-            console.log(chalk.green('  Linking completed'));
-            console.log(`  Linked assembly saved to: ${linkedAsmPath}`);
+            console.log(chalk.green('  链接完成'));
+            console.log(`  链接后的汇编文件已保存至：${linkedAsmPath}`);
           }
         } catch (error) {
-          console.error(chalk.red(`Link error: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          console.error(chalk.red(`链接错误：${error instanceof Error ? error.message : '未知错误'}`));
           process.exit(1);
         }
       }
@@ -148,8 +148,8 @@ program
       if (options.uart) {
         format = 'uart'; // 特殊标记
       } else if (!Object.values(OutputFormat).includes(format as OutputFormat)) {
-        console.error(chalk.red(`Error: Invalid output format '${format}'`));
-        console.error(chalk.yellow(`Supported formats: ${Object.values(OutputFormat).join(', ')}`));
+        console.error(chalk.red(`错误：无效的输出格式 '${format}'`));
+        console.error(chalk.yellow(`支持的格式：${Object.values(OutputFormat).join(', ')}`));
         process.exit(1);
       }
 
@@ -169,9 +169,9 @@ program
       if (options.verbose) {
         console.log(chalk.blue('Advanced Minisys-1A Assembler v2.0.0'));
         console.log(chalk.blue('====================================='));
-        console.log(`Input file: ${input}`);
-        console.log(`Output directory: ${options.output}`);
-        console.log(`Output format: ${format}`);
+        console.log(`输入文件：${input}`);
+        console.log(`输出目录：${options.output}`);
+        console.log(`输出格式：${format}`);
         console.log('');
       }
 
@@ -183,51 +183,51 @@ program
         assembler.generateOutput(result, options.output);
 
         if (options.verbose) {
-          console.log(chalk.green('Assembly completed successfully!'));
+          console.log(chalk.green('汇编完成！'));
           console.log('');
-          console.log(chalk.cyan('Statistics:'));
-          console.log(`  Instructions: ${result.statistics.totalInstructions}`);
-          console.log(`  Data bytes: ${result.statistics.totalDataBytes}`);
-          console.log(`  Labels: ${result.statistics.totalLabels}`);
-          console.log(`  Processing time: ${result.statistics.processingTime}ms`);
-          console.log(`  Memory usage: ${result.statistics.memoryUsage} bytes`);
+          console.log(chalk.cyan('统计信息：'));
+          console.log(`  指令数：${result.statistics.totalInstructions}`);
+          console.log(`  数据字节数：${result.statistics.totalDataBytes}`);
+          console.log(`  标签数：${result.statistics.totalLabels}`);
+          console.log(`  处理时间：${result.statistics.processingTime}ms`);
+          console.log(`  内存使用：${result.statistics.memoryUsage} bytes`);
           console.log('');
-          console.log(chalk.cyan('Generated files:'));
+          console.log(chalk.cyan('生成的文件：'));
           if (config.outputFormat === OutputFormat.COE || config.generateUartFiles) {
-            console.log(`  ${path.join(options.output, 'prgmip32.coe')} - Instruction memory`);
-            console.log(`  ${path.join(options.output, 'dmem32.coe')} - Data memory`);
+            console.log(`  ${path.join(options.output, 'prgmip32.coe')} - 指令内存`);
+            console.log(`  ${path.join(options.output, 'dmem32.coe')} - 数据内存`);
           }
           if (config.outputFormat === OutputFormat.HEX) {
-            console.log(`  ${path.join(options.output, 'program.hex')} - Hexadecimal format`);
+            console.log(`  ${path.join(options.output, 'program.hex')} - 十六进制格式`);
           }
           if (config.outputFormat === OutputFormat.BIN || config.generateUartFiles) {
-            console.log(`  ${path.join(options.output, 'program.bin')} - Binary format (UART)`);
+            console.log(`  ${path.join(options.output, 'program.bin')} - 二进制格式 (UART)`);
           }
           if (config.outputFormat === OutputFormat.ELF || config.generateUartFiles) {
-            console.log(`  ${path.join(options.output, 'program.elf')} - ELF format (UART)`);
+            console.log(`  ${path.join(options.output, 'program.elf')} - ELF格式 (UART)`);
           }
           if (config.outputFormat === OutputFormat.JSON) {
-            console.log(`  ${path.join(options.output, 'program.json')} - JSON format`);
+            console.log(`  ${path.join(options.output, 'program.json')} - JSON格式`);
           }
           
           if (config.generateReport) {
-            console.log(`  ${path.join(options.output, 'assembly_report.txt')} - Assembly report`);
+            console.log(`  ${path.join(options.output, 'assembly_report.txt')} - 汇编报告`);
           }
           
           if (config.generateDisassembly) {
-            console.log(`  ${path.join(options.output, 'disassembly.asm')} - Disassembly`);
+            console.log(`  ${path.join(options.output, 'disassembly.asm')} - 反汇编`);
           }
           
-          console.log(`  ${path.join(options.output, 'symbol_table.txt')} - Symbol table`);
+          console.log(`  ${path.join(options.output, 'symbol_table.txt')} - 符号表`);
         } else {
-          console.log(chalk.green('Assembly completed successfully!'));
+          console.log(chalk.green('汇编完成！'));
         }
       } else {
-        console.error(chalk.red('Assembly failed!'));
+        console.error(chalk.red('汇编失败！'));
         console.error('');
         
         if (result.errors.length > 0) {
-          console.error(chalk.red('Errors:'));
+          console.error(chalk.red('错误：'));
           result.errors.forEach(error => {
             console.error(chalk.red(`  Line ${error.lineNumber}: ${error.message}`));
             if (error.sourceLine) {
@@ -238,7 +238,7 @@ program
         
         if (result.warnings.length > 0) {
           console.error('');
-          console.error(chalk.yellow('Warnings:'));
+          console.error(chalk.yellow('警告：'));
           result.warnings.forEach(warning => {
             console.error(chalk.yellow(`  Line ${warning.lineNumber}: ${warning.message}`));
             if (warning.sourceLine) {
@@ -251,7 +251,7 @@ program
       }
 
     } catch (error) {
-      console.error(chalk.red(`Fatal error: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      console.error(chalk.red(`致命错误：${error instanceof Error ? error.message : '未知错误'}`));
       process.exit(1);
     }
   });
